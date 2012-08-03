@@ -1,0 +1,52 @@
+
+
+# in file: file_name_parameters.py
+
+def collate_param_factory (input_files_task_globs,
+                           flatten_input,
+                           regex,
+                           extra_input_files_task_globs,
+                           replace_inputs,
+                           *output_extra_specs):
+
+    #### start of monkey patch
+    monkey_patch = False
+    if hasattr(output_extra_specs[0], 'getOutputFile'):
+        monkey_patch = True
+        generate_output_params_from_input_params = output_extra_specs[0].getOutputFile
+        output_extra_specs = output_extra_specs[1:]
+        if not len(output_extra_specs):
+            output_extra_specs = [r'\1'] # ruffus needs the dummy extra argument
+            monkey_added_extra_spec = True
+        else:
+            monkey_added_extra_spec = False
+    #### end of monkey patch
+
+    """
+    Factory for task_collate
+    all [input] which lead to the same [output / extra] are combined together
+    """
+    #
+    def iterator(runtime_data):
+
+
+# and then at the end
+
+
+        # combine inputs which lead to the same output/extras into one tuple
+        for output_params, params_grouped_by_output in groupby(sorted(params_per_job), itemgetter(0)):
+            yield_param = (tuple(input_param for input_param, ignore in
+                            groupby(list(params_grouped_by_output), itemgetter(1))),) + output_params
+
+            #### start of monkey patch
+            if monkey_patch:
+                input_yield_param = yield_param[0]
+                output_yield_param = generate_output_params_from_input_params(input_yield_param)
+                if monkey_added_extra_spec:
+                    output_extra_params = output_extra_params[0:-1]
+                yield_param = [input_yield_param, output_yield_param] + list(output_extra_params) # stripping any dummy args
+                #yield_param = [input_yield_param, output_yield_param] + list(o for o in output_extra_params if o) # stripping any dummy args
+                yield_param = tuple(yield_param)
+            #### end of monkey patch
+
+            yield yield_param, yield_param
