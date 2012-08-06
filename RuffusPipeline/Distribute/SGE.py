@@ -267,7 +267,7 @@ class SGE(object):
         qsubString = "qsub %s %s" % (self.qsubArgs, tmpFileName)
         return qsubString, tmpFileName
 
-
-class HTF(SGE):
-
-    
+# 
+# class HTF(SGE):
+# 
+#     
