@@ -6,8 +6,9 @@ import XGrid, SGE
 
 class PipelineUtils(object):
 
-    def __init__(self, mode):
-        assert mode in ['', 'sge', 'xgrid']
+    def __init__(self, mode, controlvariables):
+        assert mode in ['', 'local', 'sge', 'xgrid']
+        self.controlvariables = controlvariables
         self.callingFile = os.path.abspath(inspect.stack()[1][1])
         self.mode = mode
         self.extraDependencies = list()
@@ -38,6 +39,7 @@ class PipelineUtils(object):
 #         exeName = os.path.join(self.freezeDir, os.path.splitext(os.path.split(self.callingFile)[1])[0])
 #         os.symlink(exeName, exeName+'.py')
 
+
     def distribute(self):
         """
         use like this:
@@ -47,6 +49,7 @@ class PipelineUtils(object):
             rest of function ...
         """
         if self.mode:
+
             callingFrame, callingFile, lineNr, callingFunction, lineSource, _ = inspect.stack()[1]
 
 # # FIXME: Test this should allow that us to get calling frame from a loaded
@@ -68,10 +71,22 @@ class PipelineUtils(object):
             if argsInfo.args > 2:
                 for i in range(2,len(argsInfo.args)):
                     extraArguments.append(argsInfo.locals[argsInfo.args[i]])
+
+            extraArgumentTypes = list()
+            for a in extraArguments:
+                extraArgumentTypes.append(repr(type(a)).replace("<type '", ''). replace("'>", ''))
+            extraArguments = ["%s:%s" % t for t in zip(extraArgumentTypes, map(str, extraArguments))]
+
             mapping = ','.join(['0'] * len(inputFileNames) + ['1'] * len(outputFileNames) + ['2'] * len(extraArguments))        
-            allArguments = " ".join(inputFileNames + outputFileNames + extraArguments)
-            cmd = "%s '%s' %s %s" % (callingFile, callingFunction, mapping, allArguments) # function/task is quoted so it is not confused with a possible file with same name
-            if self.mode == 'sge':
+#            print map(type, [inputFileNames, outputFileNames, map(str, extraArguments)])
+            allArguments = " ".join(inputFileNames + outputFileNames + map(str, extraArguments))
+            cmd = "python %s --controlvariables %s '%s' %s %s" % (callingFile, self.controlvariables, callingFunction, mapping, allArguments) # function/task is quoted so it is not confused with a possible file with same name
+            if self.mode == 'local':
+                p = subprocess.Popen(cmd, env=os.environ, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+                stdout, stderr = p.communicate()
+                print >>sys.stdout, stdout
+                print >>sys.stderr, stderr
+            elif self.mode == 'sge':
                 parallel_task = SGE.SGE(cmd)
                 parallel_task.run()
             elif self.mode == 'xgrid':
@@ -80,6 +95,8 @@ class PipelineUtils(object):
                 parallel_task = XGrid.XGrid(dependencies, hostname=self.hostname, password=self.password)
                 print parallel_task
                 parallel_task.run()
+            else:
+                assert 0, 'mode should be wither "local", "sge" or "xgrid"'
             return True
         else:
             return False
@@ -91,12 +108,20 @@ class PipelineUtils(object):
         arguments = [[], [], []]
         for i, a in enumerate(args):
            arguments[category_flags[i]].append(a)
-        input_files, output_files, extra_arguments = arguments
+#        input_files, output_files, extra_arguments = arguments
+        tmp = list()
+        for a in arguments[2]:
+            t, s = a.split(':')
+            tmp.append(__builtins__[t](s))
+        arguments[2] = tmp
         if not len(arguments[-1]):
             arguments.pop()
-        for i, l in enumerate(arguments):
-            if len(l) == 1:
-                arguments[i] = arguments[i][0] # to fit ruffus convention        
+        if len(arguments[0]) == 1:
+            arguments[0] = arguments[0][0] # to fit ruffus convention        
+        if len(arguments[1]) == 1:
+            arguments[1] = arguments[1][0] # to fit ruffus convention        
+        if len(arguments) == 3:
+            arguments = arguments[:2] + arguments[2] # to fit ruffus convention        
         inspect.stack()[1][0].f_globals[task](*arguments)
 #        inspect.stack()[1][0].f_globals[task](input_files, output_files, extra_arguments)
         ## locals()[task](input_files, output_files, extra_arguments)
