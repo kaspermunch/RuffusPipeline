@@ -1,5 +1,6 @@
 
 import os, sys, inspect, time, re, inspect
+from collections import defaultdict
 from itertools import izip, chain
 
 # ALL INITIAL FILES SHOULD START OUT WITH THE PROPER NAMING CONVENTION: There should be
@@ -123,13 +124,24 @@ class CollatedOutputFiles(object):
         li.sort()
         si.sort()
         toRemove = [y for x, y, z in izip(chain((None, None), li), chain((None,), li), li) if x == z-2 and y == z-1]
-        newValue = "-".join(map(str, [x for x in li if x not in set(toRemove)]))
+
+        substlst = list()
+        for x in li:
+            if x in set(toRemove):
+                substlst.append('-')
+            else:
+                substlst.append(str(x))
+        newValue = re.sub(r'(_-)+_', '-', spacer.join(substlst))
+        #newValue = "-".join(map(str, [x for x in li if x not in set(toRemove)]))
+
         if li and si:
             newValue += spacer
         newValue += spacer.join(si)
         return newValue
 
     def _parseNameList(self, inp):
+
+        def parseSuffixGroup(inp):
             original_inp_length = len(inp)
 
             tags = []
@@ -141,36 +153,29 @@ class CollatedOutputFiles(object):
                 names.add(n)
                 t = match.group(3)[0:-1]
 
-#                 if not any((t in x for x in tags)):
-#                     for x in tags:
-#                         if x in t:
-#                             tags.remove(x)
-#                             break                    
-#                     tags.append(t)
                 tags.append(t)
 
                 suffixes.add(match.group(4))
 
+            # summarize tags if possible
             d = dict()
             for t in tags:
                 for k in t.split('.'):
                     if k not in d:
                         d[k] = 0
                     d[k] += 1
-                    
-            #commons = [k for k in d if d[k] == original_inp_length/len(suffixes)] # tags that every file has
+
             commons = [k for k in d if not d[k] % (original_inp_length/len(suffixes))] # tags that every file has
-            #uniques = [k for k in d if d[k] == len(names) * len(suffixes)]  # tags that make files with a certain name+suffix unique
             uniques = [k for k in d if d[k] == len(names) * len(suffixes)]  # tags that make files with a certain name+suffix unique        
 
-
-#             print uniques
-#             print commons
-#             #print d
-#             print original_inp_length/len(suffixes), len(names) * len(suffixes)
-#             print len(d), len(commons), len(uniques)
-#             print [(k, d[k]) for k in d if not (d[k] == original_inp_length/len(suffixes) or d[k] == len(names) * len(suffixes))]
-#             print 
+            ## print len(names) * len(suffixes)
+            ## print 'original_inp_length', original_inp_length
+            ## print 'NAMES', names
+            ## print 'UNIQUE', uniques
+            ## print 'COMMONS', commons
+            ## print len(d)
+            ## for k, v in d.items():
+            ##     print k, v
 
 
             if len(d) == len(commons + uniques):  # if there are only these two kinds
@@ -201,7 +206,45 @@ class CollatedOutputFiles(object):
 
                 tags = [re.sub(r'%s([^.]*)%s' % (commonPrefix, commonSuffix), commonPrefix + newValue + commonSuffix, tags[0])]
 
+
+            # summarize names if possible
+            commonPrefix = os.path.commonprefix(names)
+            commonSuffix = os.path.commonprefix([u[::-1] for u in names])[::-1]
+            regex = re.compile(r'%s(.*)%s' % (commonPrefix, commonSuffix))
+            try:
+                values = [regex.search(u).group(1) for u in names]
+            except AttributeError:
+                values = []
+            if len(values) == len(names):
+                names = [commonPrefix + self._summarizeValues(values, '_') + commonSuffix]
+
+
             return (names, set(tags), suffixes)
+
+
+        # devide into groups based on suffix:
+        suffixGroups = defaultdict(list)
+        for fileName, suffix in ((x, os.path.splitext(x)[1]) for x in inp):
+            suffixGroups[suffix].append(fileName)
+            
+        # parse each group seperately and add results to sets
+        names = set()
+        tags = set()
+        suffixes = set()
+        for gr in suffixGroups.values():
+            n, t, s = parseSuffixGroup(gr)
+            names.update(n)
+            tags.update(t)
+            suffixes.update(s)
+
+        # parse tag sets to make sure there are no redunancies:
+        new_tags = set()
+        for t in tags:
+            if not any(t in x and t != x for x in tags):
+                new_tags.add(t)
+        tags = new_tags
+            
+        return (names, tags, suffixes)
 
     def _parse(self, lst, expandDepth):
 
@@ -215,7 +258,7 @@ class CollatedOutputFiles(object):
             if type(l) in (tuple, list):
                 n, t, s = self._parse(l, expandDepth)
             else:
-                 n, t, s = self._parseNameList([l])
+                n, t, s = self._parseNameList([l])
 
             names.update(n)
             suffixes.update(s)            
