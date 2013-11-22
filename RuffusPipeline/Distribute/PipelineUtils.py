@@ -7,7 +7,7 @@ import XGrid, SGE
 class PipelineUtils(object):
 
     def __init__(self, mode, controlvariables):
-        assert mode in ['', 'local', 'sge', 'xgrid']
+        assert mode in ['', 'local', 'sge', 'xgrid', 'dump']
         self.controlvariables = controlvariables
         self.callingFile = os.path.abspath(inspect.stack()[1][1])
         self.mode = mode
@@ -80,7 +80,7 @@ class PipelineUtils(object):
             mapping = ','.join(['0'] * len(inputFileNames) + ['1'] * len(outputFileNames) + ['2'] * len(extraArguments))        
 #            print map(type, [inputFileNames, outputFileNames, map(str, extraArguments)])
             allArguments = " ".join(inputFileNames + outputFileNames + map(str, extraArguments))
-            cmd = "python %s --controlvariables %s '%s' %s %s" % (callingFile, self.controlvariables, callingFunction, mapping, allArguments) # function/task is quoted so it is not confused with a possible file with same name
+            cmd = "%s %s --controlvariables %s '%s' %s %s" % (sys.executable, callingFile, self.controlvariables, callingFunction, mapping, allArguments) # function/task is quoted so it is not confused with a possible file with same name
             if self.mode == 'local':
                 p = subprocess.Popen(cmd, env=os.environ, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
                 stdout, stderr = p.communicate()
@@ -95,6 +95,8 @@ class PipelineUtils(object):
                 parallel_task = XGrid.XGrid(dependencies, hostname=self.hostname, password=self.password)
                 print parallel_task
                 parallel_task.run()
+            elif self.mode == 'dump':
+                print cmd
             else:
                 assert 0, 'mode should be wither "local", "sge" or "xgrid"'
             return True
