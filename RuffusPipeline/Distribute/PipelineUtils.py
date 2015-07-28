@@ -1,5 +1,5 @@
 
-import shutil, tempfile, os, sys, re, inspect, subprocess
+import shutil, tempfile, os, sys, re, inspect, subprocess, json, pipes
 
 import XGrid, SGE
 #from bbfreeze import Freezer
@@ -72,10 +72,11 @@ class PipelineUtils(object):
                 for i in range(2,len(argsInfo.args)):
                     extraArguments.append(argsInfo.locals[argsInfo.args[i]])
 
-            extraArgumentTypes = list()
-            for a in extraArguments:
-                extraArgumentTypes.append(repr(type(a)).replace("<type '", ''). replace("'>", ''))
-            extraArguments = ["%s:%s" % t for t in zip(extraArgumentTypes, map(str, extraArguments))]
+            #extraArgumentTypes = list()
+            #for a in extraArguments:
+            #    extraArgumentTypes.append(repr(type(a)).replace("<type '", ''). replace("'>", ''))
+            #extraArguments = ["%s:%s" % t for t in zip(extraArgumentTypes, ["".join(str(x).split()) for x in extraArguments])]
+            extraArguments = [pipes.quote(json.dumps(x)) for x in extraArguments]
 
             mapping = ','.join(['0'] * len(inputFileNames) + ['1'] * len(outputFileNames) + ['2'] * len(extraArguments))        
 #            print map(type, [inputFileNames, outputFileNames, map(str, extraArguments)])
@@ -87,8 +88,13 @@ class PipelineUtils(object):
                 print >>sys.stdout, stdout
                 print >>sys.stderr, stderr
             elif self.mode == 'sge':
-                parallel_task = SGE.SGE(cmd)
-                parallel_task.run()
+                qxCmd = "TMPDIR=/scratch/$PBS_JOBID qx -t 168:00:00 --no-scratch -n 1 -c 1 -w " + cmd
+                p = subprocess.Popen(qxCcmd, env=os.environ, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+                stdout, stderr = p.communicate()
+                print >>sys.stdout, stdout
+                print >>sys.stderr, stderr
+                #parallel_task = SGE.SGE(cmd)
+                #parallel_task.run()
             elif self.mode == 'xgrid':
 #                dependencies = XGrid.Dependencies(cmd, frame=callingFrame, extraDependencies=self.extraDependencies, extraDirsAndFiles=self.extraDirsAndFiles)
                 dependencies = XGrid.Dependencies(cmd, callingFile=callingFile, extraDependencies=self.extraDependencies, extraDirsAndFiles=self.extraDirsAndFiles)
@@ -112,10 +118,16 @@ class PipelineUtils(object):
            arguments[category_flags[i]].append(a)
 #        input_files, output_files, extra_arguments = arguments
         tmp = list()
-        for a in arguments[2]:
-            t, s = a.split(':')
-            tmp.append(__builtins__[t](s))
-        arguments[2] = tmp
+        #for a in arguments[2]:
+            #t, s = a.split(':')
+            #if s.startswith('"') and s.endswith("'"):
+            #    s = s[1:-1] # remove quotes
+            #if t in ('list', 'tuple', 'set'):
+            #    tmp.append(__builtins__[t](eval(s)))
+            #else:
+            #    tmp.append(__builtins__[t](s))
+        #arguments[2] = tmp
+        arguments[2] = [json.loads(x) for x in arguments[2]]
         if not len(arguments[-1]):
             arguments.pop()
         if len(arguments[0]) == 1:
