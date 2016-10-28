@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(name='RuffusPipeline',
       version='1.0',
       description='',
       author='Kasper Munch',
       author_email='kaspermunch@birc.au.dk',
-      packages=['RuffusPipeline'],
+      packages=find_packages(),
      )
